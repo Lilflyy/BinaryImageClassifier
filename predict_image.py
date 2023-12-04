@@ -23,13 +23,13 @@ pytorch_cnn.to(device)
 
 # Assuming X_test is your test data
 # Make sure X_test is a torch.Tensor with the appropriate shape
-path = 'predict/test6.jpeg'
+path = 'predict/test3.png'
 image = io.imread(path)
 
 image_size = (256, 256)  # Adjust this to the desired size
 data_transform = transform.Compose([
     transform.ToPILImage(),  # Convert numpy array to PIL Image
-    transform.Grayscale(num_output_channels=1),
+    transform.Grayscale(num_output_channels=3),
     transform.Resize(image_size),
     transform.ToTensor(),
 ])

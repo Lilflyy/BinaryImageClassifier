@@ -51,22 +51,32 @@ class PyTorchCNN(nn.Module):
         
         image_size = (256, 256)
         self.model = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
+           nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
+            nn.BatchNorm2d(num_features=32),
 
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
+            nn.BatchNorm2d(num_features=64),
 
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2),
+            nn.BatchNorm2d(num_features=128),
+            nn.Dropout(p=0.25),
+
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2),
+            nn.BatchNorm2d(num_features=256),
+            nn.Dropout(p=0.25),
 
             nn.Flatten(),
-            nn.Linear(128 * (image_size[0] // 8) * (image_size[1] // 8), 128),
+            nn.Linear(in_features=256 * (256 // (2**4)) * (256 // (2**4)), out_features=128),
             nn.ReLU(),
-            nn.Linear(128, self.num_classes)
+            nn.Linear(in_features=128, out_features=num_classes)
         )
         
 
@@ -112,7 +122,8 @@ class PyTorchCNN(nn.Module):
 
         for epoch in range(epochs):
             self.model.train()
-
+            tl = 0.0
+            tc = 0.0
             for X_train, y_train in train_loader:
                 X_train, y_train = X_train.to(device), y_train.to(device)
 
@@ -124,17 +135,22 @@ class PyTorchCNN(nn.Module):
                 loss.backward()
 
                 optimizer.step()
-
-                train_loss = loss.item()
-                train_losses.append(train_loss)
-                train_accs.append(self.accuracy(X_train, y_train))
+                tl += loss.item()
+                tc += self.accuracy(X_train, y_train)
+            train_loss = tl/len(train_loader)
+            train_losses.append(tl/len(train_loader))
+            train_accs.append(tc/len(train_loader))
 
             self.model.eval()
             with torch.no_grad():
+                vl = 0
+                va = 0
                 for X_val, y_val in val_loader:
                     X_val, y_val = X_val.to(device), y_val.to(device)
-                    val_losses.append(loss_function(self.forward(X_val), y_val).item())
-                    val_accs.append(self.accuracy(X_val, y_val))
+                    vl += loss_function(self.forward(X_val), y_val).item()
+                    va += self.accuracy(X_val, y_val)
+                val_losses.append(vl / len(val_loader))
+                val_accs.append(va / len(val_loader))
 
             if (epoch + 1) % 1 == 0:
                 print(f"[{epoch+1}/{epochs}] | Train Loss: {train_loss:.5f} | Train Accuracy: {train_accs[-1]:.5f} | Val Loss: {val_losses[-1]:.5f} | Val Accuracy: {val_accs[-1]:.5f}")
@@ -224,7 +240,7 @@ if __name__=="__main__":
     from torch.utils.data import DataLoader, random_split
     from sklearn.model_selection import train_test_split
     if torch.cuda.is_available():
-            device = torch.device("cuda")
+        device = torch.device("cuda")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
     else:
@@ -234,9 +250,10 @@ if __name__=="__main__":
     image_size = (256, 256)  # Adjust this to the desired size
     data_transform = transform.Compose([
         transform.ToPILImage(),  # Convert numpy array to PIL Image
-        transform.Grayscale(num_output_channels=1),
+        transform.Grayscale(num_output_channels=3),
         transform.Resize(image_size),
         transform.ToTensor(),
+        transform.Normalize(mean=[0.5], std=[0.5])
     ])
     data = customDataset('art_real.csv', transform=data_transform)
     # split data into traning and testing
@@ -250,7 +267,7 @@ if __name__=="__main__":
     pytorch_cnn = PyTorchCNN(num_classes=2).to(device)
 
     # Training
-    pytorch_cnn.train(train_loader, val_loader, epochs=60, learning_rate=0.002)
+    pytorch_cnn.train(train_loader, val_loader, epochs=10, learning_rate=0.002)
 
     # Evaluate on test set
     
@@ -264,7 +281,7 @@ if __name__=="__main__":
     print(f"Test Accuracy: {test_accuracy}")
     pytorch_cnn.plot_train_val_metrics()
     # saving the model
-    
+
     checkpoint = {
     'model_state_dict': pytorch_cnn.state_dict(),
     }
